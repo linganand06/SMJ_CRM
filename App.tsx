@@ -11,7 +11,7 @@ function App(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F7FA" />
+      <StatusBar barStyle="dark-content" backgroundColor="#f5f7faff" />
       <AppNavigator />
     </SafeAreaView>
   );
