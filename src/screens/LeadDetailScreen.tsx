@@ -1,12 +1,14 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert, Modal, Image, Dimensions } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { ArrowLeft, User, Phone, MapPin, Building, Calendar, Info, FileText } from 'lucide-react-native';
+import { ArrowLeft, User, Phone, MapPin, Building, Calendar, Info, FileText, Trash2, Edit, Camera } from 'lucide-react-native';
+import { deleteLead } from '../database/db';
 
 export const LeadDetailScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const { lead } = route.params as { lead: any };
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const renderSection = (title: string, data: { label: string, value: string }[], icon: any) => {
     return (
@@ -27,6 +29,28 @@ export const LeadDetailScreen = () => {
     )
   }
 
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Lead',
+      'Are you sure you want to delete this lead?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLead(lead.id);
+              navigation.goBack();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete lead');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -34,7 +58,14 @@ export const LeadDetailScreen = () => {
           <ArrowLeft size={24} color="#2C3E50" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Lead Details</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity onPress={() => (navigation as any).navigate('CreateLead', { editLead: lead })} style={[styles.backButton, { marginRight: 16 }]}>
+            <Edit size={24} color="#3498DB" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDelete} style={styles.backButton}>
+            <Trash2 size={24} color="#E74C3C" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -55,7 +86,8 @@ export const LeadDetailScreen = () => {
         {renderSection('Location Details', [
           { label: 'Area', value: lead.area },
           { label: 'City', value: lead.city },
-          { label: 'Address', value: lead.address }
+          { label: 'Address', value: lead.address },
+          { label: 'Map URL', value: lead.map_url }
         ], <MapPin size={20} color="#E74C3C" />)}
 
         {renderSection('Business Information', [
@@ -73,7 +105,41 @@ export const LeadDetailScreen = () => {
           { label: 'Follow-up Notes', value: lead.followup_notes }
         ], <Calendar size={20} color="#2ECC71" />)}
 
+        {(lead.shop_photo_uri || lead.business_card_photo_uri) && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Camera size={20} color="#34495E" />
+              <Text style={styles.sectionTitle}>Attachments</Text>
+            </View>
+            <View style={styles.attachmentsContainer}>
+              {lead.business_card_photo_uri ? (
+                <TouchableOpacity style={styles.attachmentButton} onPress={() => setSelectedImage(lead.business_card_photo_uri)}>
+                  <FileText size={20} color="#3498DB" />
+                  <Text style={styles.attachmentButtonText}>View Business Card</Text>
+                </TouchableOpacity>
+              ) : null}
+              {lead.shop_photo_uri ? (
+                <TouchableOpacity style={styles.attachmentButton} onPress={() => setSelectedImage(lead.shop_photo_uri)}>
+                  <Building size={20} color="#9B59B6" />
+                  <Text style={styles.attachmentButtonText}>View Shop Photo</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        )}
+
       </ScrollView>
+
+      <Modal visible={!!selectedImage} transparent={true} animationType="fade">
+        <View style={styles.modalContainer}>
+          <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedImage(null)}>
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+          {selectedImage && (
+            <Image source={{ uri: selectedImage }} style={styles.fullScreenImage} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -96,4 +162,11 @@ const styles = StyleSheet.create({
   dataRow: { marginBottom: 12 },
   dataLabel: { fontSize: 13, color: '#7F8C8D', marginBottom: 4, fontWeight: '500' },
   dataValue: { fontSize: 15, color: '#2C3E50', fontWeight: '600' },
+  attachmentsContainer: { gap: 12 },
+  attachmentButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9F9', padding: 16, borderRadius: 8, borderWidth: 1, borderColor: '#E0E6ED' },
+  attachmentButtonText: { marginLeft: 12, fontSize: 16, color: '#2C3E50', fontWeight: '600' },
+  modalContainer: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.9)', justifyContent: 'center', alignItems: 'center' },
+  closeButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 20 },
+  closeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  fullScreenImage: { width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.8 },
 });

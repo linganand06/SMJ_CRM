@@ -1,29 +1,42 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, SafeAreaView, KeyboardAvoidingView, Platform, PermissionsAndroid } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { insertLead } from '../database/db';
-import { ArrowLeft, Save, Calendar as CalendarIcon } from 'lucide-react-native';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { insertLead, updateLead } from '../database/db';
+import { ArrowLeft, Save, Calendar as CalendarIcon, CheckSquare, Square, Camera } from 'lucide-react-native';
 
 export const CreateLeadScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const { editLead } = (route.params as any) || {};
 
   const [formData, setFormData] = useState({
-    shop_name: '', owner_name: '', mobile_number: '', whatsapp_number: '', area: '', address: '', city: '',
-    lead_status: 'Lead', lead_source: 'Direct Visit',
-    visit_date: '', visit_notes: '', visit_outcome: 'Interested',
-    next_followup_date: '', followup_notes: '',
-    customer_requirements: '', special_remarks: '',
-    shop_photo_uri: '', business_card_photo_uri: ''
+    shop_name: editLead?.shop_name || '', owner_name: editLead?.owner_name || '', mobile_number: editLead?.mobile_number || '', whatsapp_number: editLead?.whatsapp_number || '', area: editLead?.area || '', address: editLead?.address || '', city: editLead?.city || '', map_url: editLead?.map_url || '',
+    lead_status: editLead?.lead_status || 'Lead', lead_source: editLead?.lead_source || 'Direct Visit',
+    visit_date: editLead?.visit_date || '', visit_notes: editLead?.visit_notes || '', visit_outcome: editLead?.visit_outcome || 'Interested',
+    next_followup_date: editLead?.next_followup_date || '', followup_notes: editLead?.followup_notes || '',
+    customer_requirements: editLead?.customer_requirements || '', special_remarks: editLead?.special_remarks || '',
+    shop_photo_uri: editLead?.shop_photo_uri || '', business_card_photo_uri: editLead?.business_card_photo_uri || ''
   });
 
-  const [productInterests, setProductInterests] = useState<string[]>([]);
-  const [datePickerState, setDatePickerState] = useState<{show: boolean, field: 'visit_date' | 'next_followup_date' | null}>({show: false, field: null});
+  const initialInterests = editLead?.product_interests ? JSON.parse(editLead.product_interests) : [];
+  const [productInterests, setProductInterests] = useState<string[]>(initialInterests);
+  const [datePickerState, setDatePickerState] = useState<{ show: boolean, field: 'visit_date' | 'next_followup_date' | null }>({ show: false, field: null });
+  const [isWhatsappSameAsMobile, setIsWhatsappSameAsMobile] = useState(
+    editLead ? editLead.mobile_number === editLead.whatsapp_number : false
+  );
 
   const statuses = ['Lead', 'Interested', 'Sample Given', 'Negotiation', 'Customer', 'Lost'];
   const sources = ['Direct Visit', 'Reference', 'Existing Customer', 'Social Media', 'Walk-in', 'Other'];
   const outcomes = ['Interested', 'Need Follow-up', 'Order Expected', 'Not Interested'];
   const interestOptions = ['Silver Anklets', 'Kids Collection', 'Premium Designs', 'Wholesale', 'Retail'];
+
+  useEffect(() => {
+    if (isWhatsappSameAsMobile) {
+      setFormData(prev => ({ ...prev, whatsapp_number: prev.mobile_number }));
+    }
+  }, [formData.mobile_number, isWhatsappSameAsMobile]);
 
   const toggleInterest = (interest: string) => {
     if (productInterests.includes(interest)) {
@@ -33,9 +46,72 @@ export const CreateLeadScreen = () => {
     }
   };
 
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: "Camera Permission",
+            message: "App needs camera permission to take photos.",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK"
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const pickImage = async (field: 'shop_photo_uri' | 'business_card_photo_uri') => {
+    Alert.alert('Select Photo', 'Choose an option', [
+      {
+        text: 'Camera', onPress: async () => {
+          const hasPermission = await requestCameraPermission();
+          if (!hasPermission) {
+            Alert.alert("Permission Denied", "Camera permission is required to take photos.");
+            return;
+          }
+          launchCamera({ mediaType: 'photo', saveToPhotos: true }, (res) => {
+            if (res.assets && res.assets.length > 0) {
+              setFormData({ ...formData, [field]: res.assets[0].uri || '' });
+            } else if (res.errorMessage) {
+              Alert.alert("Camera Error", res.errorMessage);
+            }
+          });
+        }
+      },
+      {
+        text: 'Gallery', onPress: () => {
+          launchImageLibrary({ mediaType: 'photo' }, (res) => {
+            if (res.assets && res.assets.length > 0) {
+              setFormData({ ...formData, [field]: res.assets[0].uri || '' });
+            }
+          });
+        }
+      },
+      { text: 'Cancel', style: 'cancel' }
+    ]);
+  };
+
   const handleSave = async (isCustomer: boolean = false) => {
-    if (!formData.shop_name || !formData.owner_name || !formData.mobile_number || !formData.area || !formData.next_followup_date) {
+    if (!formData.shop_name || !formData.owner_name || !formData.mobile_number || !formData.area || !formData.city || !formData.visit_date || !formData.visit_outcome || !formData.next_followup_date) {
       Alert.alert('Validation Error', 'Please fill all required fields (*).');
+      return;
+    }
+
+    if (!/^\d+$/.test(formData.mobile_number)) {
+      Alert.alert('Validation Error', 'Mobile number must contain only numbers, no letters or special characters.');
+      return;
+    }
+
+    if (new Date(formData.visit_date) >= new Date(formData.next_followup_date)) {
+      Alert.alert('Validation Error', 'Visit Date must be before the Next Follow-up Date.');
       return;
     }
 
@@ -46,7 +122,11 @@ export const CreateLeadScreen = () => {
     };
 
     try {
-      await insertLead(finalData);
+      if (editLead && editLead.id) {
+        await updateLead(editLead.id, finalData);
+      } else {
+        await insertLead(finalData);
+      }
       Alert.alert('Success', 'Lead saved successfully.', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
@@ -60,7 +140,7 @@ export const CreateLeadScreen = () => {
     if (Platform.OS === 'android') {
       setDatePickerState({ ...datePickerState, show: false });
     }
-    
+
     if (selectedDate && datePickerState.field) {
       const currentDate = selectedDate.toISOString().split('T')[0];
       setFormData({ ...formData, [datePickerState.field]: currentDate });
@@ -74,15 +154,17 @@ export const CreateLeadScreen = () => {
     </View>
   );
 
-  const renderInput = (label: string, field: keyof typeof formData, required: boolean = false, placeholder?: string) => (
+  const renderInput = (label: string, field: keyof typeof formData, required: boolean = false, placeholder?: string, editable: boolean = true, keyboardType: any = 'default') => (
     <View style={styles.inputContainer}>
       <Text style={styles.label}>{label} {required && <Text style={styles.required}>*</Text>}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, !editable && styles.inputDisabled]}
         placeholder={placeholder || `Enter ${label}`}
         placeholderTextColor="#BDC3C7"
         value={formData[field]}
         onChangeText={(text) => setFormData({ ...formData, [field]: text })}
+        editable={editable}
+        keyboardType={keyboardType}
       />
     </View>
   );
@@ -90,7 +172,7 @@ export const CreateLeadScreen = () => {
   const renderDateInput = (label: string, field: 'visit_date' | 'next_followup_date', required: boolean = false) => (
     <View style={styles.inputContainer}>
       <Text style={styles.label}>{label} {required && <Text style={styles.required}>*</Text>}</Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
         onPress={() => setDatePickerState({ show: true, field })}
       >
@@ -98,6 +180,18 @@ export const CreateLeadScreen = () => {
           {formData[field] || 'Select Date'}
         </Text>
         <CalendarIcon size={20} color="#BDC3C7" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderImagePicker = (label: string, field: 'shop_photo_uri' | 'business_card_photo_uri') => (
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity style={styles.imagePickerBtn} onPress={() => pickImage(field)}>
+        <Camera size={20} color={formData[field] ? '#2ECC71' : '#3498DB'} />
+        <Text style={[styles.imagePickerText, formData[field] && { color: '#2ECC71' }]}>
+          {formData[field] ? 'Photo Selected (Tap to change)' : 'Select Photo'}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -134,21 +228,28 @@ export const CreateLeadScreen = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft size={24} color="#2C3E50" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Lead</Text>
+        <Text style={styles.headerTitle}>{editLead ? 'Edit Lead' : 'Create Lead'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={styles.formContainer} contentContainerStyle={{ paddingBottom: 40 }}>
-          
+
           {renderSection('Basic Details', <>
             {renderInput('Shop Name', 'shop_name', true)}
             {renderInput('Owner Name', 'owner_name', true)}
-            {renderInput('Mobile Number', 'mobile_number', true)}
-            {renderInput('WhatsApp Number', 'whatsapp_number')}
+            {renderInput('Mobile Number', 'mobile_number', true, 'e.g. 9876543210', true, 'phone-pad')}
+
+            <TouchableOpacity style={styles.checkboxContainer} onPress={() => setIsWhatsappSameAsMobile(!isWhatsappSameAsMobile)}>
+              {isWhatsappSameAsMobile ? <CheckSquare size={20} color="#3498DB" /> : <Square size={20} color="#7F8C8D" />}
+              <Text style={styles.checkboxLabel}>WhatsApp same as Mobile</Text>
+            </TouchableOpacity>
+
+            {renderInput('WhatsApp Number', 'whatsapp_number', false, 'e.g. 9876543210', !isWhatsappSameAsMobile, 'phone-pad')}
             {renderInput('Area', 'area', true)}
+            {renderInput('City', 'city', true)}
             {renderInput('Address', 'address')}
-            {renderInput('City', 'city')}
+            {renderInput('Map URL', 'map_url', false, 'e.g. https://maps.app.goo.gl/...')}
             {renderChips('Lead Status', statuses, formData.lead_status, (val) => setFormData({ ...formData, lead_status: val }))}
           </>)}
 
@@ -161,9 +262,9 @@ export const CreateLeadScreen = () => {
           </>)}
 
           {renderSection('Visit Information', <>
-            {renderDateInput('Visit Date', 'visit_date', false)}
-            {renderInput('Visit Notes', 'visit_notes')}
+            {renderDateInput('Visit Date', 'visit_date', true)}
             {renderChips('Visit Outcome', outcomes, formData.visit_outcome, (val) => setFormData({ ...formData, visit_outcome: val }))}
+            {renderInput('Visit Notes', 'visit_notes')}
           </>)}
 
           {renderSection('Follow-up Information', <>
@@ -177,8 +278,8 @@ export const CreateLeadScreen = () => {
           </>)}
 
           {renderSection('Attachments', <>
-            {renderInput('Shop Photo URL', 'shop_photo_uri')}
-            {renderInput('Business Card Photo URL', 'business_card_photo_uri')}
+            {renderImagePicker('Shop Photo', 'shop_photo_uri')}
+            {renderImagePicker('Business Card Photo', 'business_card_photo_uri')}
           </>)}
 
           <View style={styles.actionsContainer}>
@@ -186,11 +287,11 @@ export const CreateLeadScreen = () => {
               <Save size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.primaryBtnText}>Save Lead</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => handleSave(false)}>
               <Text style={styles.secondaryBtnText}>Save & Add Follow-up</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={[styles.secondaryBtn, { borderColor: '#16A085' }]} onPress={() => handleSave(true)}>
               <Text style={[styles.secondaryBtnText, { color: '#16A085' }]}>Convert to Customer</Text>
             </TouchableOpacity>
@@ -222,6 +323,11 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#34495E', marginBottom: 8 },
   required: { color: '#E74C3C' },
   input: { backgroundColor: '#F8F9F9', borderWidth: 1, borderColor: '#E0E6ED', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#2C3E50' },
+  inputDisabled: { backgroundColor: '#E0E6ED', color: '#7F8C8D' },
+  checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  checkboxLabel: { fontSize: 15, color: '#34495E', marginLeft: 8, fontWeight: '500' },
+  imagePickerBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F3F4', borderWidth: 1, borderColor: '#BDC3C7', borderStyle: 'dashed', borderRadius: 8, padding: 16, justifyContent: 'center' },
+  imagePickerText: { marginLeft: 12, fontSize: 15, color: '#3498DB', fontWeight: '600' },
   chipsContainer: { flexDirection: 'row', flexWrap: 'wrap' },
   chip: { backgroundColor: '#F0F3F4', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: '#E0E6ED' },
   activeChip: { backgroundColor: '#3498DB', borderColor: '#3498DB' },

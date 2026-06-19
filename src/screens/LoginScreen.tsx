@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { getDBConnection } from '../database/db';
+import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
+import { Fingerprint } from 'lucide-react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,8 +24,33 @@ export const LoginScreen = () => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
+  const [biometryType, setBiometryType] = useState<string | null>(null);
+
   const navigation = useNavigation<NavigationProp>();
+
+  useEffect(() => {
+    const checkBiometrics = async () => {
+      const rnBiometrics = new ReactNativeBiometrics();
+      const { available, biometryType } = await rnBiometrics.isSensorAvailable();
+      if (available) {
+        setBiometryType(biometryType);
+      }
+    };
+    checkBiometrics();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    const rnBiometrics = new ReactNativeBiometrics();
+    try {
+      const { success } = await rnBiometrics.simplePrompt({ promptMessage: 'Authenticate to login' });
+      if (success) {
+        navigation.replace('Main');
+      }
+    } catch (error) {
+      console.log('Biometrics failed', error);
+      Alert.alert('Authentication Failed', 'Could not authenticate with biometrics.');
+    }
+  };
 
   const handleLogin = async () => {
     if (!userId.trim() || !password.trim()) {
@@ -98,6 +125,16 @@ export const LoginScreen = () => {
             <Text style={styles.buttonText}>Sign In</Text>
           )}
         </TouchableOpacity>
+
+        {biometryType && (
+          <TouchableOpacity
+            style={styles.biometricButton}
+            onPress={handleBiometricLogin}
+          >
+            <Fingerprint size={24} color="#3498DB" style={{ marginRight: 8 }} />
+            <Text style={styles.biometricButtonText}>Login with Biometrics</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -159,6 +196,22 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    paddingVertical: 12,
+    backgroundColor: '#E8F8F5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1F2EB',
+  },
+  biometricButtonText: {
+    color: '#3498DB',
     fontSize: 16,
     fontWeight: '600',
   },
