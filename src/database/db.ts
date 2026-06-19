@@ -575,7 +575,7 @@ export const addCustomerOrder = async (orderData: {
       (customer_id, category, order_unit, quantity, net_value, amount_paid, pending_amount, order_date, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-  await db.executeSql(query, [
+  const [result] = await db.executeSql(query, [
     orderData.customer_id,
     orderData.category,
     orderData.order_unit,
@@ -586,6 +586,15 @@ export const addCustomerOrder = async (orderData: {
     orderData.order_date,
     orderData.notes || '',
   ]);
+  
+  if (orderData.amount_paid > 0) {
+    const orderId = result.insertId;
+    await db.executeSql(
+      `INSERT INTO order_payments (order_id, amount_paid, payment_date, notes) VALUES (?, ?, ?, ?)`,
+      [orderId, orderData.amount_paid, orderData.order_date, 'Initial payment']
+    );
+  }
+  
   console.log(`[DB SAVE] Inserted customer_order for customer_id: ${orderData.customer_id}`);
 };
 

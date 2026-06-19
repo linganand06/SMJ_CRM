@@ -38,6 +38,7 @@ import {
   getOrderPayments,
   deleteOrderPayment,
 } from '../database/db';
+import { DatePickerInput } from '../components/DatePickerInput';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -238,27 +239,26 @@ const AddPaymentForm = ({
       />
     </View>
 
-    <Text style={tlStyles.flabel}>Payment Date (YYYY-MM-DD)</Text>
+    <Text style={tlStyles.flabel}>Payment Date</Text>
     <View style={tlStyles.inputRow}>
-      <CalendarDays size={14} color="#95A5A6" style={{ marginRight: 6 }} />
-      <TextInput
-        style={tlStyles.input}
-        placeholder={todayStr()}
-        placeholderTextColor="#BDC3C7"
+      <DatePickerInput
         value={payDate}
-        onChangeText={setPayDate}
+        onChange={setPayDate}
+        icon={<CalendarDays size={14} color="#95A5A6" style={{ marginRight: 6 }} />}
+        style={{ flex: 1, paddingVertical: 0, paddingHorizontal: 0 }}
+        textStyle={{ fontSize: 14 }}
       />
     </View>
 
-    <Text style={tlStyles.flabel}>Next Due Date (leave blank if fully settled)</Text>
+    <Text style={tlStyles.flabel}>Next Due Date</Text>
     <View style={tlStyles.inputRow}>
-      <Clock size={14} color="#95A5A6" style={{ marginRight: 6 }} />
-      <TextInput
-        style={tlStyles.input}
-        placeholder="YYYY-MM-DD  (optional)"
-        placeholderTextColor="#BDC3C7"
+      <DatePickerInput
         value={nextDue}
-        onChangeText={setNextDue}
+        onChange={setNextDue}
+        placeholder="Optional"
+        icon={<Clock size={14} color="#95A5A6" style={{ marginRight: 6 }} />}
+        style={{ flex: 1, paddingVertical: 0, paddingHorizontal: 0 }}
+        textStyle={{ fontSize: 14 }}
       />
     </View>
 
@@ -295,16 +295,20 @@ const AddPaymentForm = ({
 
 const OrderCard = ({
   item,
+  customer,
   isExpanded,
   onToggle,
   onDelete,
   onRefresh,
+  onPreview,
 }: {
   item: any;
+  customer: any;
   isExpanded: boolean;
   onToggle: () => void;
   onDelete: (id: number) => void;
   onRefresh: () => void;
+  onPreview: (item: any) => void;
 }) => {
   const isSettled = item.pending_amount <= 0;
   const dueStatus = dueDateStatus(item.next_due_date);
@@ -331,6 +335,9 @@ const OrderCard = ({
                 </View>
               : null
           }
+          <TouchableOpacity onPress={() => onPreview(item)} style={[styles.deleteBtn, { marginRight: 8, backgroundColor: '#ECF0F1' }]}>
+            <FileText size={15} color="#3498DB" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => onDelete(item.id)} style={styles.deleteBtn}>
             <Trash2 size={15} color="#E74C3C" />
           </TouchableOpacity>
@@ -549,11 +556,15 @@ export const CustomerOrdersScreen = () => {
           </Text>
         </View>
 
-        <Text style={styles.fieldLabel}>Order Date (YYYY-MM-DD)</Text>
+        <Text style={styles.fieldLabel}>Order Date</Text>
         <View style={styles.inputRow}>
-          <CalendarDays size={16} color="#95A5A6" style={styles.inputIcon} />
-          <TextInput style={styles.textInput} placeholder={todayStr()} placeholderTextColor="#BDC3C7"
-            value={orderDate} onChangeText={setOrderDate} />
+          <DatePickerInput
+            value={orderDate}
+            onChange={setOrderDate}
+            icon={<CalendarDays size={16} color="#95A5A6" style={styles.inputIcon} />}
+            style={{ flex: 1, paddingVertical: 0, paddingHorizontal: 0 }}
+            textStyle={{ fontSize: 14 }}
+          />
         </View>
 
         <Text style={styles.fieldLabel}>Notes (optional)</Text>
@@ -576,6 +587,10 @@ export const CustomerOrdersScreen = () => {
       {orders.length > 0 && <Text style={styles.historyHeading}>Order History</Text>}
     </>
   );
+
+  const handlePreviewInvoice = (item: any) => {
+    navigation.navigate('InvoicePreview' as never, { order: item, customer, totalPending } as never);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -602,10 +617,12 @@ export const CustomerOrdersScreen = () => {
           renderItem={({ item }) => (
             <OrderCard
               item={item}
+              customer={customer}
               isExpanded={expandedId === item.id}
               onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
               onDelete={handleDeleteOrder}
               onRefresh={loadOrders}
+              onPreview={handlePreviewInvoice}
             />
           )}
           ListHeaderComponent={ListHeader}

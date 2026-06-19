@@ -11,6 +11,7 @@ import { CreateLeadScreen } from '../screens/CreateLeadScreen';
 import { FollowUpScreen } from '../screens/FollowUpScreen';
 import { CustomerListScreen } from '../screens/CustomerListScreen';
 import { CustomerOrdersScreen } from '../screens/CustomerOrdersScreen';
+import { InvoicePreviewScreen } from '../screens/InvoicePreviewScreen';
 import { CatalogNavigator } from './CatalogNavigator';
 
 import { LeadDetailScreen } from '../screens/LeadDetailScreen';
@@ -24,6 +25,7 @@ export type LeadsStackParamList = {
 export type CustomerStackParamList = {
   CustomerList: undefined;
   CustomerOrders: { customer: any };
+  InvoicePreview: { order: any, customer: any };
 };
 
 const LeadsStack = createNativeStackNavigator<LeadsStackParamList>();
@@ -42,6 +44,7 @@ const CustomersNavigator = () => (
   <CustomersStack.Navigator screenOptions={{ headerShown: false }}>
     <CustomersStack.Screen name="CustomerList" component={CustomerListScreen} />
     <CustomersStack.Screen name="CustomerOrders" component={CustomerOrdersScreen} />
+    <CustomersStack.Screen name="InvoicePreview" component={InvoicePreviewScreen} />
   </CustomersStack.Navigator>
 );
 
