@@ -33,11 +33,19 @@ export const LoginScreen = () => {
       const rnBiometrics = new ReactNativeBiometrics();
       const { available, biometryType } = await rnBiometrics.isSensorAvailable();
       if (available) {
-        setBiometryType(biometryType);
+        setBiometryType(biometryType ?? null);
+        try {
+          const { success } = await rnBiometrics.simplePrompt({ promptMessage: 'Authenticate to login' });
+          if (success) {
+            navigation.replace('Main');
+          }
+        } catch (error) {
+          console.log('Initial biometrics failed', error);
+        }
       }
     };
     checkBiometrics();
-  }, []);
+  }, [navigation]);
 
   const handleBiometricLogin = async () => {
     const rnBiometrics = new ReactNativeBiometrics();
